@@ -33,7 +33,6 @@ module Data.String.Parse
 
 import Control.Applicative
 import Control.Monad
-import Data.Word
 import Prelude hiding (take, takeWhile)
 
 -- | Simple parsing result, that represent respectively:
@@ -94,6 +93,7 @@ parse :: Parser a -> String -> Result a
 parse p s = runParser p s (\_ msg -> ParseFail msg) (\b a -> ParseOK b a)
 
 ------------------------------------------------------------
+getMore :: Parser ()
 getMore = Parser $ \buf err ok -> ParseMore $ \nextChunk ->
     if null nextChunk
         then err buf "EOL: need more data"
@@ -125,7 +125,7 @@ char w = Parser $ \buf err ok ->
 -- string completely, the parser will raise a failure
 string :: String -> Parser ()
 string allExpected = consumeEq allExpected
-  where errMsg = "bytes " ++ show allExpected ++ " : failed"
+  where errMsg = "string " ++ show allExpected ++ " : failed"
 
         -- partially consume as much as possible or raise an error.
         consumeEq expected = Parser $ \actual err ok ->
@@ -135,16 +135,17 @@ string allExpected = consumeEq allExpected
 
         isMatch [] [] = Right ""
         isMatch r  [] = Right r
-        isMatch [] _  = Left ("string " ++ show allExpected ++ " : too short")
+        isMatch [] _  = Left (errMsg ++ " : too short")
         isMatch (x:xs) (y:ys)
             | x == y    = isMatch xs ys
-            | otherwise = Left ("string " ++ show allExpected ++ " : mismatch")
+            | otherwise = Left (errMsg ++ " : mismatch")
 
 ------------------------------------------------------------
 
 -- | Take @n bytes from the current position in the stream
 --
 -- FIXME optimize
+take :: Int -> Parser [Char]
 take n = Parser $ \buf err ok ->
     let (b1,b2) = splitAt n buf
      in if length b1 == n
@@ -152,21 +153,24 @@ take n = Parser $ \buf err ok ->
             else runParser (getMore >> take n) buf err ok
         
 -- | Take bytes while the @predicate hold from the current position in the stream
+takeWhile :: (Char -> Bool) -> Parser [Char]
 takeWhile predicate = Parser $ \buf err ok ->
     case span predicate buf of
         (_, "")  -> runParser (getMore >> takeWhile predicate) buf err ok
         (b1, b2) -> ok b2 b1
 
 -- | Skip @n bytes from the current position in the stream
-skip n = Parser $ \buf err ok ->
-    case dropOf n buf of
+skip :: forall a. (Num a, Eq a) => a -> Parser ()
+skip num = Parser $ \buf err ok ->
+    case dropOf num buf of
         Left n'    -> runParser (getMore >> skip n') "" err ok
         Right buf' -> ok buf' ()
   where dropOf 0 s      = Right s
         dropOf n []     = Left n
-        dropOf n (x:xs) = dropOf (n-1) xs
+        dropOf n (_:xs) = dropOf (n-1) xs
            
 -- | Skip bytes while the @predicate hold from the current position in the stream
+skipWhile :: (Char -> Bool) -> Parser ()
 skipWhile p = Parser $ \buf err ok ->
     case span p buf of
         (_, "") -> runParser (getMore >> skipWhile p) [] err ok
