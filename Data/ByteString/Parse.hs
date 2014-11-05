@@ -27,22 +27,29 @@ module Data.ByteString.Parse
     , bytes
     , take
     , takeWhile
+    , takeAll
     , skip
     , skipWhile
+    , skipAll
+    , takeStorable
     ) where
 
 import Control.Applicative
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Unsafe as B
+import qualified Data.ByteString.Internal as B (toForeignPtr)
 import Data.Word
+import Foreign.Storable (Storable, peekByteOff, sizeOf)
+import Foreign.ForeignPtr (withForeignPtr)
 import Prelude hiding (take, takeWhile)
+
+import System.IO.Unsafe (unsafePerformIO)
 
 -- | Simple parsing result, that represent respectively:
 --
 -- * failure: with the error message
--- 
+--
 -- * continuation: that need for more input data
 --
 -- * success: the remaining unparsed data and the parser value
@@ -82,7 +89,7 @@ instance Applicative Parser where
 instance Alternative Parser where
     empty = fail "Parser.Alternative.empty"
     (<|>) = mplus
-    
+
 -- | Run a parser on an @initial ByteString.
 --
 -- If the Parser need more data than available, the @feeder function
@@ -97,10 +104,23 @@ parse :: Parser a -> ByteString -> Result a
 parse p s = runParser p s (\_ msg -> ParseFail msg) (\b a -> ParseOK b a)
 
 ------------------------------------------------------------
+getMore :: Parser ()
 getMore = Parser $ \buf err ok -> ParseMore $ \nextChunk ->
     if B.null nextChunk
         then err buf "EOL: need more data"
         else ok (B.append buf nextChunk) ()
+
+getAll :: Parser ()
+getAll = Parser $ \buf err ok -> ParseMore $ \nextChunk ->
+    if B.null nextChunk
+        then ok buf ()
+        else runParser getAll (B.append buf nextChunk) err ok
+
+flushAll :: Parser ()
+flushAll = Parser $ \buf err ok -> ParseMore $ \nextChunk ->
+    if B.null nextChunk
+        then ok buf ()
+        else runParser getAll B.empty err ok
 
 ------------------------------------------------------------
 
@@ -119,7 +139,7 @@ byte :: Word8 -> Parser ()
 byte w = Parser $ \buf err ok ->
     case B.uncons buf of
         Nothing      -> runParser (getMore >> byte w) buf err ok
-        Just (c1,b2) | c1 == w   -> ok b2 () 
+        Just (c1,b2) | c1 == w   -> ok b2 ()
                      | otherwise -> err buf ("byte " ++ show w ++ " : failed")
 
 -- | Parse a sequence of bytes from current position
@@ -147,26 +167,51 @@ bytes allExpected = consumeEq allExpected
 
 ------------------------------------------------------------
 
+-- | Take a storable from the current position in the stream
+takeStorable :: Storable d
+             => Parser d
+takeStorable = anyStorable undefined
+  where
+    anyStorable :: Storable d => d -> Parser d
+    anyStorable a = do
+        (fptr, off, _) <- B.toForeignPtr <$> take (sizeOf a)
+        return $ unsafePerformIO $ withForeignPtr fptr $ \ptr -> peekByteOff ptr off
+
 -- | Take @n bytes from the current position in the stream
+take :: Int -> Parser ByteString
 take n = Parser $ \buf err ok ->
     if B.length buf >= n
         then let (b1,b2) = B.splitAt n buf in ok b2 b1
         else runParser (getMore >> take n) buf err ok
 
 -- | Take bytes while the @predicate hold from the current position in the stream
+takeWhile :: (Word8 -> Bool) -> Parser ByteString
 takeWhile predicate = Parser $ \buf err ok ->
     case B.span predicate buf of
         (_, "")  -> runParser (getMore >> takeWhile predicate) buf err ok
         (b1, b2) -> ok b2 b1
 
+-- | Take the remaining bytes from the current position in the stream
+takeAll :: Parser ByteString
+takeAll = Parser $ \buf err ok ->
+    runParser (getAll >> returnBuffer) buf err ok
+  where
+    returnBuffer = Parser $ \buf _ ok -> ok B.empty buf
+
 -- | Skip @n bytes from the current position in the stream
+skip :: Int -> Parser ()
 skip n = Parser $ \buf err ok ->
     if B.length buf >= n
         then ok (B.drop n buf) ()
         else runParser (getMore >> skip (n - B.length buf)) B.empty err ok
 
 -- | Skip bytes while the @predicate hold from the current position in the stream
+skipWhile :: (Word8 -> Bool) -> Parser ()
 skipWhile p = Parser $ \buf err ok ->
     case B.span p buf of
         (_, "") -> runParser (getMore >> skipWhile p) B.empty err ok
         (_, b2) -> ok b2 ()
+
+-- | Skip all the remaining bytes from the current position in the stream
+skipAll :: Parser ()
+skipAll = Parser $ \buf err ok -> runParser flushAll buf err ok
