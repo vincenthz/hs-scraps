@@ -79,7 +79,7 @@ instance MonadPlus Parser where
     mzero = fail "Parser.MonadPlus.mzero"
     mplus f g = Parser $ \buf err ok ->
         -- rewrite the err callback of @f to call @g
-        runParser f buf (\buf' _ -> runParser g buf' err ok) ok
+        runParser f buf (\_ _ -> runParser g buf err ok) ok
 instance Functor Parser where
     fmap f p = Parser $ \buf err ok ->
         runParser p buf err (\b a -> ok b (f a))
