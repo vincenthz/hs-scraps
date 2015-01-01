@@ -1,3 +1,12 @@
+-- |
+-- Module      : Data.String.Template
+-- License     : BSD-style
+-- Maintainer  : Vincent Hanquez <vincent@snarc.org>
+-- Stability   : experimental
+-- Portability : portable
+--
+-- A very simple template engine
+--
 module Data.String.Template
     ( Template
     , parseTemplate
