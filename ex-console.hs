@@ -4,6 +4,10 @@ import Data.Char
 data XXX = XXX
     deriving (Show)
 
+cloneDoc = "this is for cloning stuff"
+
+puxDoc = "this is the pux subcommand"
+
 main = defaultMain $ do
     programName "program"
     programDescription "this is a description of what this program does"
@@ -12,11 +16,15 @@ main = defaultMain $ do
 
     optInt <- flag 'i' "int" $ FlagRequired $ \s -> if all isDigit s then Right (read s :: Int) else Left "not an int"
 
+    --optFlag <- flag 'x' "xoxo" $ FlagRequired $ 
+
     command "clone" $ do
+        description cloneDoc
         action $ \opts -> do
             putStrLn "clone"
 
     command "pux" $ do
+        description puxDoc
         action $ \opts -> do
             putStrLn ("pux:" ++ show (getArg opts optInt))
             putStrLn ("pux:" ++ show (getArg opts optAny))

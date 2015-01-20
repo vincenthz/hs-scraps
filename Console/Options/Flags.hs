@@ -18,15 +18,15 @@ data FlagDesc = FlagDesc
     { flagShort         :: Maybe Char             -- ^ short flag parser 'o'
     , flagLong          :: Maybe String           -- ^ long flag "flag"
     , flagDescription   :: Maybe String           -- ^ description of this flag
-    , flagArg           :: FlagArgDesc            -- ^ parser for the argument to an flag
     , flagNid           :: Nid                    -- ^ flag number. internal value
+    , flagArg           :: FlagArgDesc            -- ^ parser for the argument to an flag
     , flagArgValidate   :: String -> Maybe String -- ^ if the argument doesn't validate, return the error message associated, otherwise Nothing
     }
 
 -- | Whether a flag has an flag, 
 data FlagArgDesc =
       FlagArgNone
-    | FlagArgFlagal
+    | FlagArgOptional
     | FlagArgRequired
     deriving (Show,Eq)
 
@@ -60,7 +60,7 @@ parseFlags flagParsers = loop (ParseState [] [] []) [1..]
                 processFlag (Matching opt) =
                     case flagArg opt of
                         FlagArgNone     -> ParseState ((flagNid opt, Nothing) : os) us ers
-                        FlagArgFlagal -> ParseState ((flagNid opt, Nothing) : os) us ers
+                        FlagArgOptional -> ParseState ((flagNid opt, Nothing) : os) us ers
                         FlagArgRequired ->
                             case as of
                                 []     -> let e = mkFlagError opt "required argument missing"
@@ -73,8 +73,8 @@ parseFlags flagParsers = loop (ParseState [] [] []) [1..]
                 processFlag (MatchingWithArg opt arg) =
                     case flagArg opt of
                         FlagArgNone     -> let e = mkFlagError opt "invalid argument, expecting no argument" -- fixme: tell which flag
-                                              in ParseState os (a:us) (e:ers)
-                        FlagArgFlagal ->
+                                            in ParseState os (a:us) (e:ers)
+                        FlagArgOptional ->
                             case (flagArgValidate opt) arg of
                                 Nothing     -> ParseState ((flagNid opt, Just arg):os) us ers
                                 Just optErr -> let e = mkFlagError opt ("invalid argument: " ++ optErr)
