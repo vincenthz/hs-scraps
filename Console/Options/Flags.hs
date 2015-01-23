@@ -44,8 +44,8 @@ type Flag = (Nid, Maybe String)
 data FlagError = FlagError FlagDesc Int String
 
 parseFlags :: [FlagDesc]
-             -> [String]
-             -> ([Flag], [String], [FlagError])
+           -> [String]
+           -> ([Flag], [String], [FlagError])
 parseFlags flagParsers = loop (ParseState [] [] []) [1..]
   where
         loop :: ParseState a -> [Int] -> [String] -> ([Flag], [String], [FlagError])

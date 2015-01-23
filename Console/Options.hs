@@ -225,7 +225,6 @@ flag short long fp = do
         toArg :: (String -> Either String a) -> String -> a
         toArg p = either (error "internal error toArg") id . p
 
-        isValid :: forall a . (String -> Either String a) -> String -> Maybe String
         isValid f = either Just (const Nothing) . f
 
 -- | An unnamed argument
@@ -241,7 +240,6 @@ argument = do
             case hier of
                 CommandLeaf l  -> CommandLeaf l
                 CommandTree {} -> hier -- ignore argument in a hierarchy.
-
 
 -- | give the ability to set options that are conflicting with each other
 -- if option a is given with option b then an conflicting error happens
