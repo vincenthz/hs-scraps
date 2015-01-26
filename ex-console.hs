@@ -26,8 +26,8 @@ main = defaultMain $ do
     command "pux" $ do
         description puxDoc
         action $ \opts -> do
-            putStrLn ("pux:" ++ show (getArg opts optInt))
-            putStrLn ("pux:" ++ show (getArg opts optAny))
+            putStrLn ("pux:" ++ show (opts optInt))
+            putStrLn ("pux:" ++ show (opts optAny))
 
 {-
     action $ \args -> do

@@ -16,7 +16,6 @@ module Console.Options
     -- * Arguments
     , FlagParser(..)
     , Arg
-    , getArg
     ) where
 
 import Console.Options.Flags
@@ -82,10 +81,11 @@ type FlagArgParser a = String -> Either String a
 data Args = Args [ (Nid, Maybe String) ] -- ^ flag arguments
                  [ (Nid, Maybe String) ] -- ^ unnamed arguments
 
-type Action = Args -> IO ()
+type Action = (forall a . Arg a -> a) -> IO ()
 
 initialProgramDesc = ProgramDesc Nothing Nothing (Command (CommandLeaf []) "no description" [] noAction) 0
-  where noAction _ = do
+  where noAction :: (forall a . Arg a -> a) -> IO ()
+        noAction _ = do
             hPutErrLn "error: no action defined, using default handler"
             exitFailure
 
@@ -124,7 +124,7 @@ runOptions _ _ ct = go [] ct
                                                 Just subTree -> go (opts:parsedOpts) subTree unparsed
                         CommandLeaf unnamedArgs ->
                             -- FIXME parse arguments
-                            act $ Args (concat (opts:parsedOpts)) []
+                            act (getArg $ Args (concat (opts:parsedOpts)) [])
                 (_, _, ers) -> do
                     mapM_ showOptionError ers
                     exitFailure
@@ -234,11 +234,11 @@ flag short long fp = do
 argument :: OptionDesc (Arg a)
 argument = do
     nid <- getNextID
-    modify $ \st -> st { stCT = addArg (stCT st) }
+    modify $ \st -> st { stCT = addArg undefined (stCT st) }
     return (Arg nid True undefined)
-  where addArg = modifyHier $ \hier ->
+  where addArg arg = modifyHier $ \hier ->
             case hier of
-                CommandLeaf l  -> CommandLeaf l
+                CommandLeaf l  -> CommandLeaf (arg:l)
                 CommandTree {} -> hier -- ignore argument in a hierarchy.
 
 -- | give the ability to set options that are conflicting with each other
@@ -250,7 +250,7 @@ conflict = undefined
 arguments :: OptionDesc (Arg [a])
 -}
 
-getArg :: Args -> Arg a -> a
+getArg :: Args -> (forall a . Arg a -> a)
 getArg (Args flagArgs _) (Arg nid False p) =
     maybe (error $ "internal error, argument " ++ show nid ++ " not there") (maybe (error "XXX") p) $ lookup nid flagArgs
 
