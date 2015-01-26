@@ -13,6 +13,7 @@ module Console.Options
     , flag
     , action
     , description
+    , Action
     -- * Arguments
     , FlagParser(..)
     , Arg
