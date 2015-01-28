@@ -34,7 +34,7 @@ data Matching a = NoMatching | Matching a | MatchingWithArg a String
 
 -- | the state of parsing
 data ParseState a = ParseState
-    { psFlags  :: ![Flag]      -- ^ in reverse order
+    { psFlags    :: ![Flag]      -- ^ in reverse order
     , psUnparsed :: ![String]      -- ^ in reverse order
     , psErrors   :: ![FlagError] -- ^ in reverse order
     }

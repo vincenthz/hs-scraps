@@ -38,6 +38,7 @@ data Argument = Argument
     { argumentName        :: String
     , argumentDescription :: String
     , argumentArity       :: Int
+    , argumentValidate    :: String -> Maybe String
     }
 
 -- A command that is composed of a hierarchy
@@ -123,12 +124,15 @@ runOptions _ _ ct = go [] ct
                                 (x:xs) -> case lookup x subs of
                                                 Nothing      -> errorInvalidMode x subs
                                                 Just subTree -> go (opts:parsedOpts) subTree unparsed
-                        CommandLeaf unnamedArgs ->
-                            -- FIXME parse arguments
-                            act (getArg $ Args (concat (opts:parsedOpts)) [])
+                        CommandLeaf unnamedArgs -> do
+                            let unnamedOpts = validateUnnamedArgs (reverse unnamedArgs) unparsed
+                            act (getArg $ Args (concat (unnamedOpts:opts:parsedOpts)) [])
                 (_, _, ers) -> do
                     mapM_ showOptionError ers
                     exitFailure
+
+        validateUnnamedArgs _ _ =
+            []
 
         showOptionError (FlagError opt i s) = do
             let optName = (maybe "" (:[]) $ flagShort opt) ++ " " ++ (maybe "" id $ flagLong opt)
@@ -232,11 +236,16 @@ flag short long fp = do
 --
 -- For now, argument in a point of tree that contains sub trees will be ignored.
 -- TODO: record a warning or add a strict mode (for developping the CLI) and error.
-argument :: OptionDesc (Arg a)
-argument = do
+argument :: String -> FlagArgParser a -> OptionDesc (Arg a)
+argument name fp = do
     nid <- getNextID
-    modify $ \st -> st { stCT = addArg undefined (stCT st) }
-    return (Arg nid True undefined)
+    let a = Argument { argumentName        = name
+                     , argumentDescription = ""
+                     , argumentArity       = 1
+                     , argumentValidate    = either Just (const Nothing) . fp
+                     }
+    modify $ \st -> st { stCT = addArg a (stCT st) }
+    return (Arg nid True (either (error "internal error") id . fp))
   where addArg arg = modifyHier $ \hier ->
             case hier of
                 CommandLeaf l  -> CommandLeaf (arg:l)
