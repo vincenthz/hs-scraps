@@ -73,11 +73,11 @@ data ProgramDesc = ProgramDesc
 data Arg a = Arg Int Bool (String -> a)
 
 data FlagParser a =
-      FlagRequired (FlagArgParser a)
-    | FlagOptional a (FlagArgParser a)
+      FlagRequired (ValueParser a)
+    | FlagOptional a (ValueParser a)
     | FlagNothing
 
-type FlagArgParser a = String -> Either String a
+type ValueParser a = String -> Either String a
 
 -- use something with faster lookup. using list for now, to not bring dep
 data Args = Args [ (Nid, Maybe String) ] -- ^ flag arguments
@@ -223,20 +223,20 @@ flag short long fp = do
         Nothing     -> return (Arg nid False (\"" -> undefined))
         Just (p, _) -> return (Arg nid False p)
   where (argp, aFcts) = case fp of
-                        FlagRequired p   -> (FlagArgRequired, Just (toArg p, isValid p))
-                        FlagOptional _ p -> (FlagArgOptional, Just (toArg p, isValid p))
+                        FlagRequired p   -> (FlagArgHave, Just (toArg p, isValid p))
+                        FlagOptional _ p -> (FlagArgMaybe, Just (toArg p, isValid p))
                         FlagNothing      -> (FlagArgNone, Nothing)
 
         toArg :: (String -> Either String a) -> String -> a
         toArg p = either (error "internal error toArg") id . p
 
-        isValid f = either Just (const Nothing) . f
+        isValid f = either FlagArgInvalid (const FlagArgValid) . f
 
 -- | An unnamed argument
 --
 -- For now, argument in a point of tree that contains sub trees will be ignored.
 -- TODO: record a warning or add a strict mode (for developping the CLI) and error.
-argument :: String -> FlagArgParser a -> OptionDesc (Arg a)
+argument :: String -> ValueParser a -> OptionDesc (Arg a)
 argument name fp = do
     nid <- getNextID
     let a = Argument { argumentName        = name

@@ -2,6 +2,7 @@ module Console.Options.Flags
     ( parseFlags
     , FlagDesc(..)
     , Flag(..)
+    , FlagArgValidation(..)
     , FlagArgDesc(..)
     , FlagError(..)
     , Nid
@@ -13,6 +14,8 @@ import Data.List
 
 type Nid = Int
 
+data FlagArgValidation = FlagArgValid | FlagArgInvalid String
+
 -- | How to parse a specific flag
 data FlagDesc = FlagDesc
     { flagShort         :: Maybe Char             -- ^ short flag parser 'o'
@@ -20,14 +23,14 @@ data FlagDesc = FlagDesc
     , flagDescription   :: Maybe String           -- ^ description of this flag
     , flagNid           :: Nid                    -- ^ flag number. internal value
     , flagArg           :: FlagArgDesc            -- ^ parser for the argument to an flag
-    , flagArgValidate   :: String -> Maybe String -- ^ if the argument doesn't validate, return the error message associated, otherwise Nothing
+    , flagArgValidate   :: String -> FlagArgValidation -- ^ if the argument doesn't validate, return the error message associated, otherwise Nothing
     }
 
--- | Whether a flag has an flag, 
+-- | Whether a flag has an argument, an optional one or always an argument
 data FlagArgDesc =
       FlagArgNone
-    | FlagArgOptional
-    | FlagArgRequired
+    | FlagArgMaybe
+    | FlagArgHave
     deriving (Show,Eq)
 
 data Matching a = NoMatching | Matching a | MatchingWithArg a String
@@ -35,7 +38,7 @@ data Matching a = NoMatching | Matching a | MatchingWithArg a String
 -- | the state of parsing
 data ParseState a = ParseState
     { psFlags    :: ![Flag]      -- ^ in reverse order
-    , psUnparsed :: ![String]      -- ^ in reverse order
+    , psUnparsed :: ![String]    -- ^ in reverse order
     , psErrors   :: ![FlagError] -- ^ in reverse order
     }
 
@@ -59,31 +62,34 @@ parseFlags flagParsers = loop (ParseState [] [] []) [1..]
           where processFlag NoMatching     = ParseState os (a:us) ers
                 processFlag (Matching opt) =
                     case flagArg opt of
-                        FlagArgNone     -> ParseState ((flagNid opt, Nothing) : os) us ers
-                        FlagArgOptional -> ParseState ((flagNid opt, Nothing) : os) us ers
-                        FlagArgRequired ->
+                        FlagArgNone  -> ParseState ((flagNid opt, Nothing) : os) us ers
+                        FlagArgMaybe -> ParseState ((flagNid opt, Nothing) : os) us ers
+                        FlagArgHave  ->
                             case as of
                                 []     -> let e = mkFlagError opt "required argument missing"
                                            in ParseState os (a:us) (e:ers)
                                 (x:xs) ->
                                     case (flagArgValidate opt) x of
-                                        Nothing     -> ParseState ((flagNid opt, Just x):os) us ers
-                                        Just optErr -> let e = mkFlagError opt ("invalid argument: " ++ optErr)
-                                                        in ParseState os us (e:ers)
+                                        FlagArgValid          -> ParseState ((flagNid opt, Just x):os) us ers
+                                        FlagArgInvalid optErr ->
+                                            let e = mkFlagError opt ("invalid argument: " ++ optErr)
+                                             in ParseState os us (e:ers)
                 processFlag (MatchingWithArg opt arg) =
                     case flagArg opt of
-                        FlagArgNone     -> let e = mkFlagError opt "invalid argument, expecting no argument" -- fixme: tell which flag
-                                            in ParseState os (a:us) (e:ers)
-                        FlagArgOptional ->
+                        FlagArgNone  -> let e = mkFlagError opt "invalid argument, expecting no argument" -- fixme: tell which flag
+                                         in ParseState os (a:us) (e:ers)
+                        FlagArgMaybe ->
                             case (flagArgValidate opt) arg of
-                                Nothing     -> ParseState ((flagNid opt, Just arg):os) us ers
-                                Just optErr -> let e = mkFlagError opt ("invalid argument: " ++ optErr)
-                                                in ParseState os us (e:ers)
-                        FlagArgRequired ->
+                                FlagArgValid   -> ParseState ((flagNid opt, Just arg):os) us ers
+                                FlagArgInvalid optErr ->
+                                    let e = mkFlagError opt ("invalid argument: " ++ optErr)
+                                     in ParseState os us (e:ers)
+                        FlagArgHave  ->
                             case (flagArgValidate opt) arg of
-                                Nothing     -> ParseState ((flagNid opt, Just arg):os) us ers
-                                Just optErr -> let e = mkFlagError opt ("invalid argument: " ++ optErr)
-                                                in ParseState os us (e:ers)
+                                FlagArgValid          -> ParseState ((flagNid opt, Just arg):os) us ers
+                                FlagArgInvalid optErr ->
+                                    let e = mkFlagError opt ("invalid argument: " ++ optErr)
+                                     in ParseState os us (e:ers)
 
                 mkFlagError opt s = FlagError opt i s
 
